@@ -1,6 +1,6 @@
 # AWS Facial Recognition Application
 
-### NOTE: This app is no longer live due to security and maintenance reasons. Please read the operational demo section for a visual walkthrough.
+### NOTE: This app is no longer live due to maintenance purposes. Please read the operational demo section for a visual walkthrough.
 ---
 - [1. Overview](#1-overview)
 - [2. System Architecture](#2-system-architecture)
