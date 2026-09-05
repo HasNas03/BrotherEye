@@ -1,35 +1,47 @@
-import boto3
-# have a nice return object for frontend
-import json 
-# used to call s3 bucket
+# AWS `facial_authentication` Lambda function code below (paste into code source in console)
+
+# call AWS services / use for json response
+import boto3, json
+# need s3 to get image from
 s3 = boto3.client('s3')
-# used to call rekognition
+# need rekognition to index image
 rekognition = boto3.client('rekognition', region_name='ca-central-1')
-# used to call dynamodb
-dynamodbTableName = 'rekogdb'
+# need dynamodb to store image metadata
 dynamodb = boto3.client('dynamodb', region_name='ca-central-1')
-# instantiate table
+# instantiate variable to represent table
+dynamodbTableName = 'rekogdb'
 faceTable = dynamodb.Table(dynamodbTableName)
 # specify bucket
 bucketName = 'input-pic-bucket'
 
 def lambda_handler(event, context):
+    # for debugging
     print(event)
-    # extract request param from frontend
+
+    # lambda triggered from APIG, extract file name from request param
     objectKey = event['queryStringParameters']['objectKey']
-    # rekognition is expecting a binary datatype
-    image_bytes = s3.get_object(Bucket=bucketName, Key=objectKey)['Body'].read()
+    # IMPORTANT: does not index, but compares input against faces in collection similar to uploaded face,
+    # and returns most matching stored face (for DB to receive and send full name back)
     response = rekognition.search_faces_by_image(
         CollectionId='faces',
-        Image={'Bytes':image_bytes}  
+        Image={
+            'S3Object': 
+            {
+            'Bucket': bucketName,
+            'Name': objectKey
+            }
+        }  
     )
 
     for match in response['FaceMatches']:
-        print (match['Face']['FaceId'], match['Face']['Confidence'])
-
+        # get id/confidence of the registered face from the collection
+        matchId = match['Face']['FaceId']
+        matchConfidence = match['Face']['Confidence'] # response is ordered by highest confidence first
+        print (matchId, matchConfidence)
+        # check database for match using id
         face = faceTable.get_item(
             Key={
-                'rekognitionld': match['Face']['FaceId']
+                'rekognitionId': matchId
             }
         )
         if 'Item' in face: 
@@ -40,7 +52,7 @@ def lambda_handler(event, context):
                 'lastName': face['Item']['lastName']
             })
         print('Person could not be found.')
-        return buildResponse(403, {'Message': 'Person not found xd'})
+        return buildResponse(403, {'Message': 'Person not found...'})
     
 def buildResponse(statusCode, body=None):
     response={
