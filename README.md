@@ -19,6 +19,17 @@ The application allows users to:
 - Register a user into the system via image for future authentication
 - Authenticate a user against a stored database of known individuals
 
+## Run Locally
+
+The React application is located at the repository root. From this directory, run:
+
+```bash
+npm install
+npm start
+```
+
+Then open [http://localhost:3000](http://localhost:3000). To create a production build, run `npm run build`.
+
 ---
 
 ## 2. System Architecture
@@ -111,4 +122,3 @@ Users can upload new facial images directly into the recognition database.
 
 ### 5. Facial authentication attempts for a user not first added to the database (e.g. Gordon Ramsay), will gracefully fail
 <img width="1440" height="900" alt="Screenshot 2026-01-08 at 8 31 12 PM" src="https://github.com/user-attachments/assets/e5386b1f-ad13-4441-b5fd-01201b2f0143" />
-
