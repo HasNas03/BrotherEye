@@ -13,7 +13,7 @@
 
 ## 1. Overview
 
-This project is a **serverless facial recognition and authentication system fully managed with an AWS backend and **React frontend**. It leverages **Amazon Rekognition** for facial comparison and uses **AWS Lambda, API Gateway, S3, and DynamoDB** to form a scalable, event-driven architecture. The project can be used as an elementary employee/visitor access authentication system.
+Brother Eye is a serverless facial authentication system, fully managed by a Python/AWS backend and React frontend. It leverages **Amazon Rekognition** for facial comparison and indexing, and uses **AWS Lambda, API Gateway, S3, and DynamoDB** to form a scalable, event-driven backend architecture. Brother Eye serves as an elementary employee/visitor access authentication system.
 
 The application allows users to:
 - Register a user into the system via image for future authentication
