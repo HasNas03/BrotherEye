@@ -1,324 +1,370 @@
 import defaultImageSource from './start.png';
-import info from './info.png';
-import { useState } from 'react';
-// import { BrowserRouter as Router, Route, Link } from 'react-router-dom';
-// import Rules from './Rules';
+import { useEffect, useState } from 'react';
 import './App.css';
 
-// UUID lib to generate a unique filename for visitor images (prevents different visitors from uploading 
-// files with the same name)
 const uuid = require('uuid');
+const API_URL = 'https://04zc8qo7og.execute-api.us-east-1.amazonaws.com/dev';
 
 function App() {
+  const [activeMode, setActiveMode] = useState('verify');
+  const [authImage, setAuthImage] = useState(null);
+  const [registrationImage, setRegistrationImage] = useState(null);
+  const [authPreview, setAuthPreview] = useState(defaultImageSource);
+  const [registrationPreview, setRegistrationPreview] = useState(defaultImageSource);
+  const [authMessage, setAuthMessage] = useState({
+    type: 'neutral',
+    text: 'Choose a photo to check it against the registered faces.',
+  });
+  const [registrationMessage, setRegistrationMessage] = useState({
+    type: 'neutral',
+    text: 'Add a face to the database for future authentication.',
+  });
+  const [busyAction, setBusyAction] = useState(null);
 
-  // stores the file object selected by the user from <input type="file">
-  // empty because no image has been selected yet
-  const [image, setImage] = useState('');
+  useEffect(() => {
+    if (!authImage) {
+      setAuthPreview(defaultImageSource);
+      return undefined;
+    }
 
-  const [uploadResultMessage, setuploadResultMessage] = useState(
-    'Please upload an image to be authenticated');
+    const previewUrl = URL.createObjectURL(authImage);
+    setAuthPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [authImage]);
 
-  // holds whether authentication succeeded
-  const [isAuth, setAuth] = useState(false);
+  useEffect(() => {
+    if (!registrationImage) {
+      setRegistrationPreview(defaultImageSource);
+      return undefined;
+    }
 
+    const previewUrl = URL.createObjectURL(registrationImage);
+    setRegistrationPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [registrationImage]);
 
-  // ============================================================
-  // AUTH FLOW
-  // ============================================================
-  // Called when the user submits the "Authenticate Image" form.
-  // 1. upload visitor image to S3 through API Gateway
-  // 2. call authenticate() with the image's unique filename
-  // 3. auth lambda searches rekognition collection
-  // 4. atched id is looked up in dynamodb
-  // 5. frontend receives success/failure
-  // ============================================================
-  function sendImage(e) {
-    e.preventDefault();
+  async function sendImage(event) {
+    event.preventDefault();
+    if (!authImage || busyAction) return;
 
-    // Generate a unique filename for this visitor image
-    // e.g. "550e8400-e29b-41d4-a716-446655440000"
-    const visitorImageName = uuid.v4();
+    setBusyAction('authenticate');
+    setAuthMessage({ type: 'loading', text: 'Checking this face…' });
 
-    // upload the visitor image
-    fetch(
-      `https://04zc8qo7og.execute-api.us-east-1.amazonaws.com/dev/input-pic-bucket/${visitorImageName}.jpeg`,
-      {
-        method: 'PUT', // PUT to upload/create the image
-        headers: {
-          'Content-Type': 'image/jpeg'
-        },
-        body: image
+    try {
+      const visitorImageName = uuid.v4();
+      const uploadResponse = await fetch(
+        `${API_URL}/input-pic-bucket/${visitorImageName}.jpeg`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: authImage,
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        throw new Error('The image could not be uploaded. Please try again.');
       }
-    )
 
-    // authenticate that S3 image
-    .then(async () => {
-      // authenticate() will tell the auth lambda which s3 object
-      // should be checked
-      const response = await authenticate(visitorImageName);
-      if (response.Message === 'Success') {
-        // mark authentication as successful
-        setAuth(true);
-        // display the person name returned
-        setuploadResultMessage(
-          `Facial Authentication successful, welcome ${response['firstName']} ${response['lastName']}`);
+      const params = new URLSearchParams({
+        objectKey: `${visitorImageName}.jpeg`,
+      });
+      const authResponse = await fetch(
+        `${API_URL}/employee?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!authResponse.ok) {
+        throw new Error('Authentication is temporarily unavailable. Please try again.');
       }
 
-      // no registered person matched
-      else {
-        setAuth(false);
-        setuploadResultMessage(
-          'Facial Authentication failed'
-        );
+      const result = await authResponse.json();
+      if (result.Message === 'Success') {
+        setAuthMessage({
+          type: 'success',
+          text: `Welcome, ${result.firstName} ${result.lastName}. Your identity was verified.`,
+        });
+      } else {
+        setAuthMessage({
+          type: 'failure',
+          text: 'No match found. Make sure this person has been added to the database.',
+        });
       }
-    })
-
-    // handles errors like failed upload/API request
-    .catch(error => {
-      setAuth(false);
-      setuploadResultMessage(
-        'Auth error. Cannot detect a face');
+    } catch (error) {
       console.error(error);
-    });
+      setAuthMessage({
+        type: 'failure',
+        text: error.message || 'We could not process this image. Please try again.',
+      });
+    } finally {
+      setBusyAction(null);
+    }
   }
 
+  async function uploadToCentralS3(event) {
+    event.preventDefault();
+    if (!registrationImage || busyAction) return;
 
-  // ============================================================
-  // CALL AUTH LAMBDA
-  // ============================================================
-  // - visitor image already uploaded to s3
-  // - function sends the S3 object key/filename to the authentication API
-  //   so lambda knows which visitor image in S3 to process
+    setBusyAction('register');
+    setRegistrationMessage({ type: 'loading', text: 'Adding this face…' });
 
-  async function authenticate(visitorImageName) {
+    try {
+      const response = await fetch(
+        `${API_URL}/central-image-bucket/${encodeURIComponent(registrationImage.name)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: registrationImage,
+        }
+      );
 
-    // build query parameter
-    const params = new URLSearchParams({
-      objectKey: `${visitorImageName}.jpeg`
-    });
-
-
-    // construct the API Gateway URL
-    //
-    // final URL will look roughly like /employee?objectKey=550e8400-....jpeg
-    const requestUrl =
-      `https://04zc8qo7og.execute-api.us-east-1.amazonaws.com/dev/employee?${params.toString()}`;
-
-
-    // call the authentication API/Lambda
-    return await fetch(requestUrl, {
-      method: 'GET', // we're requesting an authentication result
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',}
-
-    })
-
-    .then(response => response.json())
-    .then((data) => {
-      return data;
-    })
-    .catch(error => console.error(error));
-  }
-
-
-  // ============================================================
-  // REGISTRATION FLOW
-  // ============================================================
-  // 1. uploads a known person's image to the central image s3 bucket via APIGW PUT
-  // 2. the upload triggers the registration Lambda to index via rekognition and store in db
-  
-  function uploadToCentralS3(e) {
-    e.preventDefault();
-    // registration images keep their original filename
-    const centralImageName = image.name;
-
-
-    // upload registered persons image to the central S3 bucket
-    fetch(
-      `https://04zc8qo7og.execute-api.us-east-1.amazonaws.com/dev/central-image-bucket/${centralImageName}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'image/jpeg'},
-        body: image
+      if (!response.ok) {
+        throw new Error('The image could not be added. Please try again.');
       }
-    )
 
-    // if upload succeeded
-    .then(() => {
-      setuploadResultMessage(
-        'Image uploaded to central database successfully');
-      console.log("uploaded");})
-
-    // if upload failed
-    .catch(error => {
-      setuploadResultMessage(
-        'Error uploading image to database');
-      console.error(error);});
+      setRegistrationMessage({ type: 'success', text: 'Image added to the database successfully' });
+    } catch (error) {
+      console.error(error);
+      setRegistrationMessage({
+        type: 'failure',
+        text: error.message || 'We could not add this image. Please try again.',
+      });
+    } finally {
+      setBusyAction(null);
+    }
   }
 
-
-  // ============================================================
-  // FILE SELECTION HANDLER
-  // ============================================================
-  //
-  // Runs whenever the user selects a file from either file input.
-  // ============================================================
-  function handleImageChange(e) {
-    setImage(e.target.files[0]);
-  }
-
-
-  // ============================================================
-  // USER INTERFACE
-  // ============================================================
   return (
-    <div className="App">
+    <main className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="/" aria-label="Brother Eye home">
+          <span className="brand-mark" aria-hidden="true">
+            <span />
+          </span>
+          <span>brother<span className="brand-accent">eye</span></span>
+        </a>
+        <nav className="mode-switch" aria-label="Choose an action">
+          <button
+            className={`mode-button ${activeMode === 'verify' ? 'mode-button-active' : ''}`}
+            type="button"
+            aria-pressed={activeMode === 'verify'}
+            onClick={() => setActiveMode('verify')}
+          >
+            Verify
+          </button>
+          <button
+            className={`mode-button ${activeMode === 'add' ? 'mode-button-active' : ''}`}
+            type="button"
+            aria-pressed={activeMode === 'add'}
+            onClick={() => setActiveMode('add')}
+          >
+            Add
+          </button>
+        </nav>
+        <span className="topbar-note">
+          <span className="status-dot" />
+          Maintenance mode
+        </span>
+      </header>
 
-      <div className="icon-container">
-
-        {/* Display information icon */}
-        <img
-          src={info}
-          alt="Icon"
-          className="icon"
-        />
-
-
-        {/* Instructions for visitor authentication */}
-        <p className='icon2'>
-          Authenticate Image:
-          <br/><br/>
-
-          Upload an image from your computer for facial authentication.
-          If it is in the database, you will be authenticated!
+      <section className="intro">
+        <h1>{activeMode === 'verify' ? 'Recognize the right face, every time' : 'Add someone new.'}</h1>
+        <p className="intro-copy">
+          {activeMode === 'verify'
+            ? 'Check a photo against registered faces.'
+            : 'Register a face for future authentication.'}
         </p>
+      </section>
 
+      <section className="workflow-layout" aria-label="Maintenance status and face identity">
+        <aside className="maintenance-card" aria-label="Maintenance notice">
+          <span className="maintenance-icon" aria-hidden="true">!</span>
+          <div>
+            <p className="maintenance-label">SERVICE NOTICE</p>
+            <h2>Currently offline</h2>
+            <p>
+              Brother Eye is no longer live due to maintenance purposes. Live face
+              verification and registration are unavailable.
+            </p>
+          </div>
+        </aside>
 
-        {/* Instructions for registering a new person */}
-        <p className='icon2'>
-          Upload to Database:
-          <br/><br/>
+        <section className="workflow" aria-label="Face identity actions">
+          {activeMode === 'verify' ? (
+            <article className="workflow-card authentication-card">
+          <div className="card-heading">
+            <div className="step-icon verify-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3" />
+                <circle cx="12" cy="10" r="3" />
+                <path d="M6.5 18c.8-2.4 2.7-3.7 5.5-3.7s4.7 1.3 5.5 3.7" />
+              </svg>
+            </div>
+            <div>
+              <span className="step-label"></span>
+              <h2>Verify identity</h2>
+            </div>
+          </div>
 
-          In order to successfully authenticate a face, an image of
-          the same face must be present in the database.
+          <p className="card-description">
+            Upload a photo and we’ll check it against registered faces.
+          </p>
 
-          Upload a facial image directly to the database in the format
+          <form onSubmit={sendImage}>
+            <label className="upload-zone" htmlFor="auth-image">
+              <span className="upload-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
+                </svg>
+              </span>
+              <span className="upload-title">
+                {authImage ? authImage.name : 'Choose a photo to verify'}
+              </span>
+              <span className="upload-hint">
+                {authImage ? 'Select another photo' : 'JPG, PNG or JPEG'}
+              </span>
+              <input
+                id="auth-image"
+                type="file"
+                accept="image/*"
+                onChange={(event) => setAuthImage(event.target.files[0] || null)}
+              />
+            </label>
 
-          <b className='bold'>
-            'Firstname_Lastname.filetype'
-          </b>
+            <div className="preview-frame">
+              <img
+                className={authImage ? 'preview-image' : 'preview-image preview-placeholder'}
+                src={authPreview}
+                alt={authImage ? 'Selected photo preview' : 'Face preview placeholder'}
+              />
+              <span className="preview-caption">
+                {authImage ? 'READY TO VERIFY' : 'PHOTO PREVIEW'}
+              </span>
+            </div>
 
-          <br/>
+            <button
+              className="action-button primary-button"
+              type="submit"
+              disabled={!authImage || busyAction !== null}
+            >
+              {busyAction === 'authenticate' ? 'Verifying…' : 'Authenticate photo'}
+              <span aria-hidden="true">→</span>
+            </button>
+          </form>
 
-          for future authentication!
-        </p>
+          <p className={`feedback feedback-${authMessage.type}`} role="status" aria-live="polite">
+            <span className="feedback-indicator" aria-hidden="true" />
+            {authMessage.text}
+          </p>
+            </article>
+          ) : (
+            <article className="workflow-card registration-card">
+          <div className="card-heading">
+            <div className="step-icon add-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="9" cy="8" r="3.5" />
+                <path d="M2.8 19c.5-3.1 2.6-4.8 6.2-4.8 1.6 0 2.9.4 3.9 1.1M18 11v8m-4-4h8" />
+              </svg>
+            </div>
+            <div>
+              <span className="step-label"></span>
+              <h2>Add a face</h2>
+            </div>
+          </div>
 
-      </div>
+          <p className="card-description">
+            Register a new person so they can be recognized next time.
+          </p>
 
+          <form onSubmit={uploadToCentralS3}>
+            <label className="upload-zone" htmlFor="registration-image">
+              <span className="upload-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
+                </svg>
+              </span>
+              <span className="upload-title">
+                {registrationImage ? registrationImage.name : 'Choose a photo to add'}
+              </span>
+              <span className="upload-hint">
+                {registrationImage ? 'Select another photo' : 'JPG, PNG or JPEG'}
+              </span>
+              <input
+                id="registration-image"
+                type="file"
+                accept="image/*"
+                onChange={(event) => setRegistrationImage(event.target.files[0] || null)}
+              />
+            </label>
 
-      {/* Application title */}
-      <h2 className='title'>
-        Brother Eye
-      </h2>
+            <div className="preview-frame">
+              <img
+                className={registrationImage ? 'preview-image' : 'preview-image preview-placeholder'}
+                src={registrationPreview}
+                alt={registrationImage ? 'Selected photo preview' : 'Face preview placeholder'}
+              />
+              <span className="preview-caption">
+                {registrationImage ? 'READY TO ADD' : 'PHOTO PREVIEW'}
+              </span>
+            </div>
 
+            <div className="naming-note">
+              <span className="note-icon" aria-hidden="true">i</span>
+              <span>
+                Please name the file <strong>Firstname_Lastname.jpg</strong> to ensure proper identification.
+              </span>
+            </div>
 
-      {/* Intro text */}
-      <h4 style={{color: 'white'}}>
-        Welcome, please read the info page before using the application.
-        Happy authenticating!
-      </h4>
+            <button
+              className="action-button secondary-button"
+              type="submit"
+              disabled={!registrationImage || busyAction !== null}
+            >
+              {busyAction === 'register' ? 'Adding to database…' : 'Add to database'}
+              <span aria-hidden="true">→</span>
+            </button>
+          </form>
 
+          <div
+            className={`feedback feedback-${registrationMessage.type} ${
+              registrationMessage.type === 'success' ? 'feedback-prominent' : ''
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            {registrationMessage.type === 'success' ? (
+              <>
+                <span className="feedback-check" aria-hidden="true">✓</span>
+                <span className="feedback-copy">
+                  <strong>{registrationMessage.text}</strong>
+                  <span className="feedback-detail">
+                    {registrationImage.name} is ready for future identity verification.
+                  </span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="feedback-indicator" aria-hidden="true" />
+                {registrationMessage.text}
+              </>
+            )}
+          </div>
+            </article>
+          )}
+        </section>
+      </section>
 
-      {/* ======================================================
-          AUTHENTICATION FORM
-
-          Selecting file → handleImageChange()
-          Clicking button → sendImage()
-          ====================================================== */}
-      <form onSubmit={sendImage}>
-
-        {/* Store selected visitor image in `image` state */}
-        <input
-          type='file'
-          name='image'
-          onChange={handleImageChange}
-        />
-
-        {/* Submitting this form calls sendImage() */}
-        <button
-          className='button'
-          type='submit'
-        >
-          Authenticate Image
-        </button>
-
-      </form>
-
-
-      {/* ======================================================
-          REGISTRATION FORM
-
-          Selecting file → handleImageChange()
-          Clicking button → uploadToCentralS3()
-
-          Uploading to central S3 can trigger registration Lambda.
-          ====================================================== */}
-      <form onSubmit={uploadToCentralS3}>
-
-        <input
-          type='file'
-          name='centralImage'
-          onChange={handleImageChange}
-        />
-
-        <button
-          className='button2'
-          type='submit'
-        >
-          Upload to Database
-        </button>
-
-      </form>
-
-
-      {/* Display success/failure message.
-          CSS class changes depending on authentication result. */}
-      <div className={`message ${isAuth ? 'success' : 'failure'}`}>
-        {uploadResultMessage}
-      </div>
-
-
-      <div className='images'>
-
-        {/* Preview the user's selected image.
-
-            If an image has been selected:
-                URL.createObjectURL(image)
-                creates a temporary browser URL so it can be displayed.
-
-            Otherwise:
-                show start.png.
-        */}
-        <img
-          src={
-            image
-              ? URL.createObjectURL(image)
-              : defaultImageSource
-          }
-          alt="Visitor Image"
-          height={350}
-          width={350}
-          className='image'
-        />
-
-      </div>
-
-    </div>
+      <footer className="page-footer">
+        <span className="footer-mark" aria-hidden="true" />
+        Images are sent to AWS for identity verification and registration.
+      </footer>
+    </main>
   );
 }
 
-
-// Makes App available to the rest of the React application.
 export default App;
