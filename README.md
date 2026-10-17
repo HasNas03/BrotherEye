@@ -102,23 +102,12 @@ Users can upload new facial images directly into the recognition database.
 
 ## 4. Operational Demo
 
-### 1. Arrive at the application main page, and click the bottom 'Choose File' in order to first upload an individual (e.g. Steve Irwin)
-<img width="1440" height="900" alt="Screenshot 2026-01-08 at 6 42 51 PM" src="https://github.com/user-attachments/assets/1b50a87e-dce8-4401-877b-a36dc682cff9" />
-<img width="1440" height="900" alt="Screenshot 2026-01-08 at 6 45 31 PM" src="https://github.com/user-attachments/assets/623c9059-bbd8-4997-9e97-d34b5b3885dc" />
+### 1. Select the 'Add' page to add an individual to the database
+<img width="1440" height="787" alt="step1" src="https://github.com/user-attachments/assets/2fdf56af-2983-41e5-b3f0-87921e9c230e" />
 
----
-### 2. 
-#### 2.1 Once the image is selected, click 'Upload to Database' to upload the user to the central database
-<img width="1440" height="900" alt="Screenshot 2026-01-08 at 6 56 53 PM" src="https://github.com/user-attachments/assets/83b32877-4494-4aba-b43b-b220761b79c8" />
+### 2. Upon file upload, submit the image for future authentication
+<img width="1440" height="788" alt="step2" src="https://github.com/user-attachments/assets/5687c239-04f5-4472-aa0f-d6ee121a92b0" />
 
-#### 2.2 The image is now uploaded, and uploaded of Steve Irwin can be used for verification
+### 3. For authentication, select the 'Verify' page and upload an image to verify individual access
+<img width="1440" height="789" alt="step3" src="https://github.com/user-attachments/assets/06439abe-685c-46f8-a112-e7d453a3d054" />
 
----
-### 3. Click the top 'Choose File' in order to upload an image-to-verify of Steve Irwin
-<img width="1440" height="900" alt="Screenshot 2026-01-08 at 8 20 20 PM" src="https://github.com/user-attachments/assets/616e3795-39b6-4957-92dc-8e7ba349eb07" />
-
-### 4. Once the image is selected, click 'Authenticate Image' to verify the image identity against the central database
-<img width="1440" height="900" alt="Screenshot 2026-01-08 at 8 22 53 PM" src="https://github.com/user-attachments/assets/8ff99e97-6f6b-4697-a5b7-4f34d94a2130" />
-
-### 5. Facial authentication attempts for a user not first added to the database (e.g. Gordon Ramsay), will gracefully fail
-<img width="1440" height="900" alt="Screenshot 2026-01-08 at 8 31 12 PM" src="https://github.com/user-attachments/assets/e5386b1f-ad13-4441-b5fd-01201b2f0143" />
