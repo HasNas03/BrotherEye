@@ -17,6 +17,12 @@ npm start
 
 Open [http://localhost:3000](http://localhost:3000). To create a production build, run `npm run build`. Face registration and verification require the AWS backend.
 
+## GitHub Pages
+
+The GitHub Actions workflow builds the React app and syncs its production files to the repository root on each push to `main`. In the repository's **Settings → Pages**, choose **Deploy from a branch**, select `main`, and choose `/(root)`. The published app will replace the README as the repository's Pages homepage.
+
+The workflow needs permission to push its generated site files. In **Settings → Actions → General → Workflow permissions**, allow read and write permissions. After pushing the workflow to `main`, wait for the **Build GitHub Pages site** workflow to finish.
+
 ---
 
 ## 2. System Architecture

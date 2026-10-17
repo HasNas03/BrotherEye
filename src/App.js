@@ -142,7 +142,7 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="Brother Eye home">
+        <a className="brand" href="./" aria-label="Brother Eye home">
           <span className="brand-mark" aria-hidden="true">
             <span />
           </span>
