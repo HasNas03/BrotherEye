@@ -220,7 +220,7 @@ function App() {
 
       {/* Application title */}
       <h2 className='title'>
-        AWS Facial Rekognition Application
+        Brother Eye
       </h2>
 
 
