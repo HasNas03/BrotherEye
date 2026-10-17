@@ -24,11 +24,12 @@ jobs:
         run: npm ci
       - name: Build app
         run: npm run build
-      - name: Publish app to repository root
+      - name: Publish app under docs/
         run: |
-          rm -rf static
-          cp -R build/. .
-          git add -A -- index.html asset-manifest.json favicon.ico logo192.png logo512.png manifest.json robots.txt static .nojekyll
+          rm -rf docs
+          mkdir docs
+          cp -R build/. docs/
+          git add -A
           if git diff --cached --quiet; then
             echo "The published site is already up to date."
             exit 0

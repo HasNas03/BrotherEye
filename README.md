@@ -19,7 +19,7 @@ Open [http://localhost:3000](http://localhost:3000). To create a production buil
 
 ## GitHub Pages
 
-The GitHub Actions workflow builds the React app and syncs its production files to the repository root on each push to `main`. In the repository's **Settings → Pages**, choose **Deploy from a branch**, select `main`, and choose `/(root)`. The published app will replace the README as the repository's Pages homepage.
+The GitHub Actions workflow builds the React app on each push to `main` and keeps all generated site files together under `docs/`. In the repository's **Settings → Pages**, choose **Deploy from a branch**, select `main`, and choose `/docs`. The published app will be available at the repository's GitHub Pages URL.
 
 The workflow needs permission to push its generated site files. In **Settings → Actions → General → Workflow permissions**, allow read and write permissions. After pushing the workflow to `main`, wait for the **Build GitHub Pages site** workflow to finish.
 
